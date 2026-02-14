@@ -1,6 +1,6 @@
 {
-  "confidence": 80,
-  "cooldown": 3,
+  "confidence": 10,
+  "cooldown": 5,
   "keybinds": [
     {
       "name": "Show Desktop",
