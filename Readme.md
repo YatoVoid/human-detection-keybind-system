@@ -1,3 +1,8 @@
+
+<img width="1483" height="937" alt="Pasted image" src="https://github.com/user-attachments/assets/8fd95270-5dee-4178-bff8-2e60fbb1046d" />
+<img width="1483" height="937" alt="Pasted image (2)" src="https://github.com/user-attachments/assets/2cc5d83f-da68-4397-bd78-562ca7aeaa98" />
+
+
 # Human Detection Camera System
 
 A cross-platform application that detects humans via camera and triggers custom keyboard shortcuts. Works seamlessly on Windows and Linux with automatic dependency installation.
