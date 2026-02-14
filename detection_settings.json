@@ -1,0 +1,10 @@
+{
+  "confidence": 80,
+  "cooldown": 3,
+  "keybinds": [
+    {
+      "name": "Show Desktop",
+      "keys": "super+d"
+    }
+  ]
+}

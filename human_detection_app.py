@@ -167,6 +167,18 @@ install_requirements()
 
 import cv2
 import numpy as np
+
+# Suppress verbose OpenCV error messages
+import os
+os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
+os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+
+# Try to set log level if supported (OpenCV 4.6+)
+try:
+    cv2.setLogLevel(0)
+except:
+    pass
+
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QLabel, QComboBox, 
                              QTextEdit, QGroupBox, QSpinBox, QCheckBox,
@@ -183,6 +195,8 @@ class KeybindWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.recording = False
+        self.recorded_keys = []
         self.setup_ui()
         
     def setup_ui(self):
@@ -194,8 +208,13 @@ class KeybindWidget(QWidget):
         self.name_input.setMinimumWidth(200)
         
         self.keys_input = QLineEdit()
-        self.keys_input.setPlaceholderText("Keys (e.g., alt+f4 or win+d)")
+        self.keys_input.setPlaceholderText("Keys (e.g., alt+f4 or super+d)")
         self.keys_input.setMinimumWidth(250)
+        
+        self.record_btn = QPushButton("Record")
+        self.record_btn.clicked.connect(self.toggle_recording)
+        self.record_btn.setMaximumWidth(80)
+        self.record_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; }")
         
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self))
@@ -205,9 +224,136 @@ class KeybindWidget(QWidget):
         layout.addWidget(self.name_input)
         layout.addWidget(QLabel("Keys:"))
         layout.addWidget(self.keys_input)
+        layout.addWidget(self.record_btn)
         layout.addWidget(self.remove_btn)
         
         self.setLayout(layout)
+    
+    def toggle_recording(self):
+        """Toggle key recording mode"""
+        if not self.recording:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """Start recording keys"""
+        from pynput import keyboard
+        
+        self.recording = True
+        self.recorded_keys = []
+        self.keys_input.setText("Press keys now...")
+        self.keys_input.setStyleSheet("background-color: #ffeb3b; color: #000;")
+        self.record_btn.setText("Stop")
+        self.record_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; }")
+        
+        # Start keyboard listener
+        self.listener = keyboard.Listener(
+            on_press=self.on_key_press,
+            on_release=self.on_key_release
+        )
+        self.listener.start()
+    
+    def stop_recording(self):
+        """Stop recording keys"""
+        if hasattr(self, 'listener'):
+            self.listener.stop()
+        
+        self.recording = False
+        self.record_btn.setText("Record")
+        self.record_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; }")
+        self.keys_input.setStyleSheet("")
+        
+        # Convert recorded keys to string
+        if self.recorded_keys:
+            key_string = '+'.join(self.recorded_keys)
+            self.keys_input.setText(key_string)
+    
+    def on_key_press(self, key):
+        """Handle key press during recording"""
+        from pynput import keyboard
+        
+        if not self.recording:
+            return False
+        
+        # Convert key to string
+        key_str = self.key_to_string(key)
+        
+        # Add to recorded keys if not already there
+        if key_str and key_str not in self.recorded_keys:
+            self.recorded_keys.append(key_str)
+            
+            # Update display in real-time
+            preview = '+'.join(self.recorded_keys)
+            self.keys_input.setText(preview)
+    
+    def on_key_release(self, key):
+        """Handle key release during recording"""
+        from pynput import keyboard
+        
+        # Stop recording on escape
+        if key == keyboard.Key.esc:
+            self.stop_recording()
+            return False
+    
+    def key_to_string(self, key):
+        """Convert pynput key to string representation"""
+        from pynput import keyboard
+        
+        # Map special keys
+        special_map = {
+            keyboard.Key.ctrl: 'ctrl',
+            keyboard.Key.ctrl_l: 'ctrl',
+            keyboard.Key.ctrl_r: 'ctrl',
+            keyboard.Key.alt: 'alt',
+            keyboard.Key.alt_l: 'alt',
+            keyboard.Key.alt_r: 'alt',
+            keyboard.Key.shift: 'shift',
+            keyboard.Key.shift_l: 'shift',
+            keyboard.Key.shift_r: 'shift',
+            keyboard.Key.cmd: 'super',
+            keyboard.Key.cmd_l: 'super',
+            keyboard.Key.cmd_r: 'super',
+            keyboard.Key.tab: 'tab',
+            keyboard.Key.space: 'space',
+            keyboard.Key.enter: 'enter',
+            keyboard.Key.backspace: 'backspace',
+            keyboard.Key.delete: 'delete',
+            keyboard.Key.esc: 'esc',
+            keyboard.Key.up: 'up',
+            keyboard.Key.down: 'down',
+            keyboard.Key.left: 'left',
+            keyboard.Key.right: 'right',
+            keyboard.Key.home: 'home',
+            keyboard.Key.end: 'end',
+            keyboard.Key.page_up: 'pageup',
+            keyboard.Key.page_down: 'pagedown',
+            keyboard.Key.insert: 'insert',
+            keyboard.Key.f1: 'f1',
+            keyboard.Key.f2: 'f2',
+            keyboard.Key.f3: 'f3',
+            keyboard.Key.f4: 'f4',
+            keyboard.Key.f5: 'f5',
+            keyboard.Key.f6: 'f6',
+            keyboard.Key.f7: 'f7',
+            keyboard.Key.f8: 'f8',
+            keyboard.Key.f9: 'f9',
+            keyboard.Key.f10: 'f10',
+            keyboard.Key.f11: 'f11',
+            keyboard.Key.f12: 'f12',
+        }
+        
+        if key in special_map:
+            return special_map[key]
+        
+        # Handle character keys
+        try:
+            if hasattr(key, 'char') and key.char:
+                return key.char.lower()
+        except:
+            pass
+        
+        return None
     
     def get_keybind(self):
         """Get the keybind configuration"""
@@ -256,29 +402,100 @@ class HumanDetectionApp(QMainWindow):
         # Load saved settings
         self.load_settings()
     
+    def download_cascades(self):
+        """Download Haar cascade files if not found locally"""
+        import urllib.request
+        
+        base_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/"
+        cascade_files = [
+            'haarcascade_fullbody.xml',
+            'haarcascade_upperbody.xml',
+        ]
+        
+        # Create local directory for cascades
+        cascade_dir = os.path.join(os.path.dirname(__file__) or '.', 'cascades')
+        os.makedirs(cascade_dir, exist_ok=True)
+        
+        for cascade_name in cascade_files:
+            try:
+                local_path = os.path.join(cascade_dir, cascade_name)
+                
+                # Download if doesn't exist
+                if not os.path.exists(local_path):
+                    print(f"  Downloading {cascade_name}...")
+                    url = base_url + cascade_name
+                    urllib.request.urlretrieve(url, local_path)
+                    print(f"  ✓ Downloaded {cascade_name}")
+                
+                # Try to load it
+                cascade = cv2.CascadeClassifier(local_path)
+                if not cascade.empty():
+                    self.cascades.append(cascade)
+                    print(f"  ✓ Loaded {cascade_name}")
+                    
+            except Exception as e:
+                print(f"  ✗ Failed to download/load {cascade_name}: {e}")
+        
+        if not self.cascades:
+            print("⚠ Warning: Human detection will not be available")
+    
     def load_detector(self):
         """Load the human detection model"""
-        # Using Haar Cascade for full body detection
-        cascade_path = cv2.data.haarcascades + 'haarcascade_fullbody.pkl'
-        
-        # Try multiple cascade options
-        cascades = [
+        # Try multiple cascade options for human detection
+        cascade_files = [
             'haarcascade_fullbody.xml',
             'haarcascade_upperbody.xml',
         ]
         
         self.cascades = []
-        for cascade_name in cascades:
-            try:
-                cascade_path = cv2.data.haarcascades + cascade_name
-                cascade = cv2.CascadeClassifier(cascade_path)
-                if not cascade.empty():
-                    self.cascades.append(cascade)
-            except:
-                pass
+        
+        # Try to find cascades in different possible locations
+        search_paths = []
+        
+        # Method 1: Try cv2.data.haarcascades (if available)
+        try:
+            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+                search_paths.append(cv2.data.haarcascades)
+        except:
+            pass
+        
+        # Method 2: Common system paths
+        search_paths.extend([
+            '/usr/share/opencv4/haarcascades/',
+            '/usr/share/opencv/haarcascades/',
+            '/usr/local/share/opencv4/haarcascades/',
+            '/usr/local/share/opencv/haarcascades/',
+        ])
+        
+        # Method 3: Try to find via cv2 module location
+        try:
+            import cv2
+            cv2_path = os.path.dirname(cv2.__file__)
+            search_paths.append(os.path.join(cv2_path, 'data', 'haarcascades'))
+        except:
+            pass
+        
+        # Try to load cascades from found paths
+        for cascade_name in cascade_files:
+            for search_path in search_paths:
+                try:
+                    cascade_path = os.path.join(search_path, cascade_name)
+                    if os.path.exists(cascade_path):
+                        cascade = cv2.CascadeClassifier(cascade_path)
+                        if not cascade.empty():
+                            self.cascades.append(cascade)
+                            print(f"✓ Loaded cascade: {cascade_name}")
+                            break  # Found this cascade, move to next one
+                except Exception as e:
+                    continue
         
         if not self.cascades:
-            print("Warning: Could not load human detection cascades")
+            print("⚠ Warning: Could not load Haar cascade classifiers for human detection")
+            print("The app will still work but human detection may be limited")
+            print("Attempting to download cascades...")
+            
+            # Try to download cascades if not found
+            self.download_cascades()
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -387,11 +604,13 @@ class HumanDetectionApp(QMainWindow):
         
         # Help text
         help_text = QLabel(
-            "Key format examples:\n"
+            "Click 'Record' to capture keys from your keyboard!\n"
+            "Or manually type key combinations:\n"
             "• Single key: a, space, esc\n"
-            "• Combo: ctrl+c, alt+f4, win+d\n"
+            "• Combo: ctrl+c, alt+f4, super+d\n"
             "• Multiple: ctrl+shift+esc\n\n"
-            "Special keys: ctrl, alt, shift, win, cmd, esc, enter, tab, space"
+            "Special keys: ctrl, alt, shift, super, win, cmd,\n"
+            "esc, enter, tab, space, f1-f12"
         )
         help_text.setStyleSheet("color: #666; font-size: 9px;")
         help_text.setWordWrap(True)
@@ -435,22 +654,51 @@ class HumanDetectionApp(QMainWindow):
     
     def detect_cameras(self):
         """Detect available cameras"""
+        # Save current camera index before clearing
+        current_index = self.camera_combo.currentIndex()
+        was_running = self.timer.isActive()
+        
+        # Stop current camera
+        self.stop_camera()
+        
         self.camera_combo.clear()
         self.available_cameras = []
         
+        # Suppress OpenCV warnings during camera detection
+        import warnings
+        warnings.filterwarnings('ignore')
+        
         # Try first 10 camera indices
         for i in range(10):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                self.available_cameras.append(i)
-                self.camera_combo.addItem(f"Camera {i}")
+            try:
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    # Verify it's actually a working camera by trying to read a frame
+                    ret, _ = cap.read()
+                    if ret:
+                        self.available_cameras.append(i)
+                        self.camera_combo.addItem(f"Camera {i}")
                 cap.release()
+            except:
+                pass
+        
+        warnings.filterwarnings('default')
         
         if not self.available_cameras:
             self.status_label.setText("Status: No cameras detected")
             QMessageBox.warning(self, "No Cameras", "No cameras were detected on your system.")
         else:
             self.status_label.setText(f"Status: Found {len(self.available_cameras)} camera(s)")
+            
+            # Try to restore previous camera selection
+            if current_index >= 0 and current_index < len(self.available_cameras):
+                self.camera_combo.setCurrentIndex(current_index)
+            elif len(self.available_cameras) > 0:
+                self.camera_combo.setCurrentIndex(0)
+            
+            # Restart camera if it was running before
+            if was_running:
+                self.start_camera()
     
     def change_camera(self, index):
         """Change the active camera"""
@@ -525,18 +773,28 @@ class HumanDetectionApp(QMainWindow):
             'ctrl': Key.ctrl,
             'alt': Key.alt,
             'shift': Key.shift,
-            'win': Key.cmd if platform.system() == "Darwin" else Key.cmd,
+            'win': Key.cmd,
             'cmd': Key.cmd,
+            'super': Key.cmd,  # Linux super key (same as win/cmd)
+            'meta': Key.cmd,   # Alternative name for super
             'esc': Key.esc,
+            'escape': Key.esc,
             'enter': Key.enter,
+            'return': Key.enter,
             'tab': Key.tab,
             'space': Key.space,
             'backspace': Key.backspace,
             'delete': Key.delete,
+            'del': Key.delete,
             'up': Key.up,
             'down': Key.down,
             'left': Key.left,
             'right': Key.right,
+            'home': Key.home,
+            'end': Key.end,
+            'pageup': Key.page_up,
+            'pagedown': Key.page_down,
+            'insert': Key.insert,
             'f1': Key.f1, 'f2': Key.f2, 'f3': Key.f3, 'f4': Key.f4,
             'f5': Key.f5, 'f6': Key.f6, 'f7': Key.f7, 'f8': Key.f8,
             'f9': Key.f9, 'f10': Key.f10, 'f11': Key.f11, 'f12': Key.f12,
@@ -561,17 +819,114 @@ class HumanDetectionApp(QMainWindow):
         if not keys:
             return
         
+        # For Linux, try xdotool first (more reliable), then fall back to pynput
+        if platform.system() == "Linux":
+            if self.trigger_keybind_xdotool(keys):
+                return
+        
+        # Fall back to pynput (Windows and Linux fallback)
+        self.trigger_keybind_pynput(keys)
+    
+    def trigger_keybind_xdotool(self, keys):
+        """Trigger keybind using xdotool (Linux only, more reliable)"""
         try:
-            # Press all keys
-            for key in keys:
-                self.keyboard.press(key)
+            from pynput.keyboard import Key
             
-            # Small delay
+            # Convert keys to xdotool format
+            xdo_keys = []
+            for key in keys:
+                if key == Key.ctrl:
+                    xdo_keys.append('ctrl')
+                elif key == Key.alt:
+                    xdo_keys.append('alt')
+                elif key == Key.shift:
+                    xdo_keys.append('shift')
+                elif key == Key.cmd:
+                    xdo_keys.append('super')
+                elif key == Key.tab:
+                    xdo_keys.append('Tab')
+                elif key == Key.space:
+                    xdo_keys.append('space')
+                elif key == Key.enter:
+                    xdo_keys.append('Return')
+                elif key == Key.esc:
+                    xdo_keys.append('Escape')
+                elif key == Key.backspace:
+                    xdo_keys.append('BackSpace')
+                elif key == Key.delete:
+                    xdo_keys.append('Delete')
+                elif key == Key.up:
+                    xdo_keys.append('Up')
+                elif key == Key.down:
+                    xdo_keys.append('Down')
+                elif key == Key.left:
+                    xdo_keys.append('Left')
+                elif key == Key.right:
+                    xdo_keys.append('Right')
+                elif key == Key.home:
+                    xdo_keys.append('Home')
+                elif key == Key.end:
+                    xdo_keys.append('End')
+                elif key == Key.page_up:
+                    xdo_keys.append('Page_Up')
+                elif key == Key.page_down:
+                    xdo_keys.append('Page_Down')
+                elif hasattr(key, 'name') and key.name.startswith('f') and key.name[1:].isdigit():
+                    xdo_keys.append('F' + key.name[1:])
+                elif isinstance(key, str):
+                    xdo_keys.append(key)
+            
+            if xdo_keys:
+                # Build xdotool command
+                cmd = ['xdotool', 'key', '+'.join(xdo_keys)]
+                subprocess.run(cmd, check=True, capture_output=True, timeout=1)
+                return True
+                
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            # xdotool not available or failed, will fall back to pynput
+            return False
+        except Exception as e:
+            print(f"xdotool error: {e}")
+            return False
+        
+        return False
+    
+    def trigger_keybind_pynput(self, keys):
+        """Trigger keybind using pynput (cross-platform fallback)"""
+        try:
+            # Separate modifier keys from regular keys
+            from pynput.keyboard import Key
+            
+            modifiers = []
+            regular_keys = []
+            
+            for key in keys:
+                # Check if it's a modifier key
+                if key in [Key.ctrl, Key.alt, Key.shift, Key.cmd]:
+                    modifiers.append(key)
+                else:
+                    regular_keys.append(key)
+            
+            # Press all modifier keys first
+            for mod in modifiers:
+                self.keyboard.press(mod)
+            
+            # Small delay to ensure modifiers are registered
             time.sleep(0.05)
             
-            # Release all keys in reverse order
-            for key in reversed(keys):
+            # Press and release regular keys while holding modifiers
+            for key in regular_keys:
+                self.keyboard.press(key)
+                time.sleep(0.02)
                 self.keyboard.release(key)
+                time.sleep(0.02)
+            
+            # Small delay before releasing modifiers
+            time.sleep(0.05)
+            
+            # Release all modifier keys
+            for mod in reversed(modifiers):
+                self.keyboard.release(mod)
                 
         except Exception as e:
             print(f"Error triggering keybind: {e}")
@@ -635,7 +990,7 @@ class HumanDetectionApp(QMainWindow):
         # Display
         self.camera_label.setPixmap(QPixmap.fromImage(qt_image))
     
-    def save_settings(self):
+    def save_settings(self, show_message=True):
         """Save settings to file"""
         settings = {
             'confidence': self.confidence_spin.value(),
@@ -646,9 +1001,13 @@ class HumanDetectionApp(QMainWindow):
         try:
             with open('detection_settings.json', 'w') as f:
                 json.dump(settings, f, indent=2)
-            QMessageBox.information(self, "Settings Saved", "Settings have been saved successfully!")
+            if show_message:
+                QMessageBox.information(self, "Settings Saved", "Settings have been saved successfully!")
+            return True
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
+            if show_message:
+                QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
+            return False
     
     def load_settings(self):
         """Load settings from file"""
@@ -676,10 +1035,23 @@ class HumanDetectionApp(QMainWindow):
     
     def closeEvent(self, event):
         """Clean up on close"""
+        # Auto-save settings silently
+        try:
+            self.save_settings(show_message=False)
+        except:
+            pass
+        
         self.stop_camera()
         event.accept()
 
 def main():
+    # Fix for Wayland on GNOME
+    if platform.system() == "Linux":
+        if 'WAYLAND_DISPLAY' in os.environ or 'XDG_SESSION_TYPE' in os.environ:
+            if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+                # Set QT to use XWayland for better compatibility
+                os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
+    
     app = QApplication(sys.argv)
     window = HumanDetectionApp()
     window.show()
